@@ -1,0 +1,64 @@
+{
+  "tasks": [
+    {
+      "task_id": 0,
+      "memory_limit": 256000,
+      "time_limit": 2000,
+      "subtasks": [
+        {
+          "subtask_id": 0,
+          "testcases": [
+            {
+              "input_path": "tasks/task0/subtask0/test0.in",
+              "expected_output_path": "tasks/task0/subtask0/test0.out",
+              "output_path": "tasks/task0/subtask0/test0.user.out"
+            },
+            {
+              "input_path": "tasks/task0/subtask0/test1.in",
+              "expected_output_path": "tasks/task0/subtask0/test1.out",
+              "output_path": "tasks/task0/subtask0/test1.user.out"
+            },
+            {
+              "input_path": "tasks/task0/subtask0/test2.in",
+              "expected_output_path": "tasks/task0/subtask0/test2.out",
+              "output_path": "tasks/task0/subtask0/test2.user.out"
+            }
+          ]
+        },
+        {
+          "subtask_id": 1,
+          "testcases": [
+            {
+              "input_path": "tasks/task0/subtask1/test0.in",
+              "expected_output_path": "tasks/task0/subtask1/test0.out",
+              "output_path": "tasks/task0/subtask1/test0.user.out"
+            },
+            {
+              "input_path": "tasks/task0/subtask1/test1.in",
+              "expected_output_path": "tasks/task0/subtask1/test1.out",
+              "output_path": "tasks/task0/subtask1/test1.user.out"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "task_id": 1,
+      "memory_limit": 512000,
+      "time_limit": 5000,
+      "subtasks": [
+        {
+          "subtask_id": 0,
+          "testcases": [
+            {
+              "input_path": "tasks/task1/subtask0/test0.in",
+              "expected_output_path": "tasks/task1/subtask0/test0.out",
+              "output_path": "tasks/task1/subtask0/test0.user.out"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
