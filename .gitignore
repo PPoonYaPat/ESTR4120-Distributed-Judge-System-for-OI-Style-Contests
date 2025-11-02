@@ -1,2 +1,4 @@
 .vscode/
 latex/build/
+build/
+testfiles/

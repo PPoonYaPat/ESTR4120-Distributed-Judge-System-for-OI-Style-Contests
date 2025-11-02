@@ -1,13 +1,25 @@
 #include <bits/stdc++.h>
 #include "connection.h"
-#include "../common/common.h"
 #include <cstdint>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <cerrno>
+#include <cstring>
 
 using namespace std;
 
-int start_connection(uint16_t listen_port) {
+string ip_to_string(in_addr_t address) {
+    char addr_str[INET_ADDRSTRLEN];
+    struct in_addr addr;
+    addr.s_addr = address;
+    inet_ntop(AF_INET, &addr, addr_str, INET_ADDRSTRLEN);
+    return string(addr_str);
+}
+
+int listen_on_port(uint16_t listen_port) {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         perror("socket");
@@ -35,19 +47,23 @@ int start_connection(uint16_t listen_port) {
         return -1;
     }
 
-    sin_size=sizeof(their_addr);
-    new_fd=accept(sockfd, (struct sockaddr*)&their_addr, &sin_size);
+    return sockfd;
+};
+
+int accept_connection(int sockfd) {
+    struct sockaddr_in their_addr;
+    socklen_t sin_size = sizeof(their_addr);
+    int new_fd = accept(sockfd, (struct sockaddr*)&their_addr, &sin_size);
 
     if (new_fd==-1) {
         perror("accept");
         return -1;
     }
 
-    close(sockfd);
     return new_fd;
-};
+} 
 
-int connect_to(in_addr_t address, uint16_t remote_port) {
+int connect_to(in_addr_t address, uint16_t remote_port) { // expect in network order
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) {
         perror("socket");
@@ -59,11 +75,14 @@ int connect_to(in_addr_t address, uint16_t remote_port) {
     server_addr.sin_port = htons(remote_port);
     server_addr.sin_addr.s_addr = address;
 
-    if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+    int connect_result = connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    
+    if (connect_result < 0) {
         perror("connect");
+        close(sockfd);
         return -1;
     }
-    
+
     return sockfd;
 };
 
@@ -87,6 +106,7 @@ void sendTaskMessage(const TaskMessage& task_message, const vector<char>& execut
                                  executable_data.size() - total_sent, 0);
             if (bytes <= 0) {
                 perror("send executable data");
+                close(socket);
                 break;
             }
             total_sent += bytes;
@@ -118,11 +138,13 @@ pair<TaskMessage, vector<char>> receiveTaskMessage(int socket) {
     if (msg_converted.executable_size > 0) {
         executable_data.resize(msg_converted.executable_size);
         size_t total_received = 0;
-        while (total_received < msg_converted.executable_size) {
+        size_t exec_size = static_cast<size_t>(msg_converted.executable_size);
+        while (total_received < exec_size) {
             bytes = recv(socket, executable_data.data() + total_received, 
-                        msg_converted.executable_size - total_received, 0);
+                        exec_size - total_received, 0);
             if (bytes <= 0) {
                 executable_data.clear();
+                close(socket);
                 break;
             }
             total_received += bytes;

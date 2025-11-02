@@ -1,14 +1,18 @@
+#ifndef CONNECTION_H
+#define CONNECTION_H
+
 #include <cstdint>
 #include <netinet/in.h>
 #include "../common/common.h"
 #include <bits/stdc++.h>
+#include <arpa/inet.h>
 using namespace std;
 
 // return fd on TCP connection success
 // otherwise return -1
-
-int start_connection(uint16_t listen_port);
-
+string ip_to_string(in_addr_t address);
+int listen_on_port(uint16_t listen_port);
+int accept_connection(int sockfd);
 int connect_to(in_addr_t address, uint16_t remote_port);
 
 
@@ -23,3 +27,5 @@ void sendTaskMessage(const TaskMessage& task_message, const vector<char>& execut
 // Returns: pair containing (TaskMessage with network byte order converted, executable_data)
 // Returns empty vector and invalid TaskMessage if receive fails
 pair<TaskMessage, vector<char>> receiveTaskMessage(int socket);
+
+#endif

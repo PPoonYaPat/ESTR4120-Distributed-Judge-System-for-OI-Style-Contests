@@ -1,3 +1,6 @@
+#ifndef COMMON_H
+#define COMMON_H
+
 #include <bits/stdc++.h>
 #include <netinet/in.h>
 using namespace std;
@@ -29,9 +32,11 @@ struct TaskMessage {
 
 struct MachineAddress {
     in_addr_t address;
-    uint16_t port;
+    uint16_t listening_port;
 };
 
 void sendResult(const Result& result, int socket);
 
 Result receiveResult(int socket);
+
+#endif // COMMON_H
