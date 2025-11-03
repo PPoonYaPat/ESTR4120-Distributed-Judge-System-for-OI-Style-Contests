@@ -1,5 +1,6 @@
 #include "Worker.h"
 #include "../utils/connection.h"
+
 #include "../common/common.h"
 #include <sys/socket.h>
 #include <unistd.h>
@@ -18,6 +19,10 @@
 
 using json = nlohmann::json;
 using namespace std;
+
+// ============================================================================
+// Worker constructor
+// ============================================================================
 
 Worker::Worker(int listening_port) : early_termination(false) {
 
@@ -47,6 +52,10 @@ Worker::Worker(int listening_port) : early_termination(false) {
     close(listening_socket);
 }
 
+// ============================================================================
+// Start worker
+// ============================================================================
+
 void Worker::start() {
     thread control_thread(&Worker::controlMessageListener, this);
     thread process_thread(&Worker::processTasksLoop, this);
@@ -54,6 +63,10 @@ void Worker::start() {
     control_thread.join();
     process_thread.join();
 }
+
+// ============================================================================
+// Receive testcase
+// ============================================================================
 
 void Worker::receive_testcase() {
     receive_file(data_socket);
@@ -69,6 +82,10 @@ void Worker::receive_testcase() {
         }
     }
 }
+
+// ============================================================================
+// Initialize task
+// ============================================================================
 
 void Worker::init_task(string testcase_config_path) {
     ifstream file(testcase_config_path);
@@ -108,6 +125,10 @@ void Worker::init_task(string testcase_config_path) {
     }
 }
 
+// ============================================================================
+// Control message listener
+// ============================================================================
+
 void Worker::controlMessageListener() {
     while (true) {
         char buffer[1024];
@@ -120,40 +141,14 @@ void Worker::controlMessageListener() {
     }
 }
 
-void Worker::test_receive_exe() {
-    auto [task_message, executable_data] = receiveTaskMessage(data_socket);
-
-    if (task_message.executable_size <= 0) {
-        cerr << "Error: Invalid executable size" << endl;
-        return;
-    }
-
-    // Create executables directory if it doesn't exist
-    struct stat info;
-    if (stat("executables", &info) != 0) {
-        mkdir("executables", 0755);
-    }
-
-    // Generate unique executable filename
-    string executable_path = "executables/exec_" + to_string(time(nullptr));
-
-    // Save executable to file
-    ofstream exec_file(executable_path, ios::binary);
-    if (!exec_file) {
-        cerr << "Error: Cannot create executable file" << endl;
-        return;
-    }
-    exec_file.write(executable_data.data(), task_message.executable_size);
-    exec_file.close();
-
-    // Make executable
-    chmod(executable_path.c_str(), 0755);
-    cout << "Received executable from distributor" << endl;
-}
+// ============================================================================
+// Process tasks loop
+// ============================================================================
 
 void Worker::processTasksLoop() {
     while (true) {
         auto [task_message, executable_data] = receiveTaskMessage(data_socket);
+        cout<<"[Worker] Received task message from distributor"<<endl;
         
         if (task_message.task_id < 0 || executable_data.empty()) {
             break;
@@ -166,7 +161,7 @@ void Worker::processTasksLoop() {
         int executable_size = task_message.executable_size;
 
         if (executable_size <= 0) {
-            cerr << "Error: Invalid executable size" << endl;
+            cout << "[Worker] Error: Invalid executable size" << endl;
             continue;
         }
 
@@ -182,7 +177,7 @@ void Worker::processTasksLoop() {
         // Save executable to file
         ofstream exec_file(executable_path, ios::binary);
         if (!exec_file) {
-            cerr << "Error: Cannot create executable file" << endl;
+            cout << "[Worker] Error: Cannot create executable file" << endl;
             continue;
         }
         exec_file.write(executable_data.data(), executable_size);
@@ -200,7 +195,10 @@ void Worker::processTasksLoop() {
         result.test_output.clear();
         early_termination = false;
 
+        cout<<"[Worker] Task "<<taskID<<" subtask "<<subtaskID<<" has "<<taskData[taskID].subtask[subtaskID].testcase.size()<<" testcases"<<endl;
+
         for (int i=0; i<(int)taskData[taskID].subtask[subtaskID].testcase.size(); ++i) {
+            cout<<"[Worker] Processing testcase "<<i<<" for task "<<taskID<<" subtask "<<subtaskID<<endl;
             
             if (i%mod!=r) continue;
 
@@ -226,15 +224,21 @@ void Worker::processTasksLoop() {
         unlink(executable_path.c_str());
 
         sendResult(result, data_socket);
+        cout<<"[Worker] Sent result to distributor"<<endl;
     }
 }
+
+// ============================================================================
+// Execute code
+// ============================================================================
 
 Output Worker::execute_code(Testcase testcase, int time_limit, int memory_limit, string executable_path) {
     Output output;
     output.time_usage = 0;
     output.memory_usage = 0;
-    output.verdict = "RE";
+    output.verdict = "correct"; //"RE"; This is for testing the distributor, not the checker (code executor)
     output.user_output = "";
+    return output; // TODO: remove this -> This is only for testing the distributor, not the checker (code executor)
 
     // Ensure directory exists
     mkdir("executables", 0755);

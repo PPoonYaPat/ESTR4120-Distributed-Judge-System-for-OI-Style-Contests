@@ -1,6 +1,7 @@
 #include "Distributor.h"
 #include "../common/common.h"
 #include "../utils/connection.h"
+#include "../utils/base_connection.h"
 #include <unistd.h>
 #include <nlohmann/json.hpp>
 #include <bits/stdc++.h>
@@ -8,11 +9,18 @@
 using json = nlohmann::json;
 using namespace std;
 
+// ============================================================================
+// Distributor constructor
+// ============================================================================
+
 Distributor::Distributor(int output_FD, vector<MachineAddress> machine_addresses) : should_stop(false) {
     output_fd = output_FD;
     cnt_worker = (int)machine_addresses.size();
     this->machine_addresses = machine_addresses;
+
     for (auto machine_address : machine_addresses) {
+
+        // Connect to worker data socket
         int worker_data_socket=connect_to(machine_address.address, machine_address.listening_port);
         if (worker_data_socket == -1) {
             cerr << "[Distributor] Failed to connect to worker data socket at "<<ip_to_string(machine_address.address)<<":"<<machine_address.listening_port<<endl;
@@ -21,6 +29,7 @@ Distributor::Distributor(int output_FD, vector<MachineAddress> machine_addresses
         worker_data_sockets.push_back(worker_data_socket);
         cout<<"Connected to worker data socket at "<<ip_to_string(machine_address.address)<<":"<<machine_address.listening_port<<endl;
 
+        // Connect to worker control socket
         int worker_control_socket=connect_to(machine_address.address, machine_address.listening_port);
         if (worker_control_socket == -1) {
             cerr << "[Distributor] Failed to connect to worker control socket at "<<ip_to_string(machine_address.address)<<":"<<machine_address.listening_port<<endl;
@@ -30,6 +39,10 @@ Distributor::Distributor(int output_FD, vector<MachineAddress> machine_addresses
         cout<<"Connected to worker control socket at "<<ip_to_string(machine_address.address)<<":"<<machine_address.listening_port<<endl;
     }
 }
+
+// ============================================================================
+// Send testcase to workers
+// ============================================================================
 
 void Distributor::send_testcase(string file_config_path) {
     init_task(file_config_path);
@@ -48,6 +61,10 @@ void Distributor::send_testcase(string file_config_path) {
         }
     }
 }
+
+// ============================================================================
+// Initialize task
+// ============================================================================
 
 void Distributor::init_task(string testcase_config_path) {
     ifstream file(testcase_config_path);
@@ -87,11 +104,19 @@ void Distributor::init_task(string testcase_config_path) {
     }
 }
 
+// ============================================================================
+// Start distributor
+// ============================================================================
+
 void Distributor::start() {
     for (int i=0; i<(int)worker_data_sockets.size(); ++i) {
         worker_threads.push_back(thread(&Distributor::worker_communication_loop, this, worker_data_sockets[i], worker_control_sockets[i]));
     }
 }
+
+// ============================================================================
+// Wait for completion
+// ============================================================================
 
 void Distributor::wait_for_completion() {
     for (auto& t : worker_threads) {
@@ -101,22 +126,33 @@ void Distributor::wait_for_completion() {
     }
 }
 
+// ============================================================================
+// Shutdown distributor
+// ============================================================================
+
 void Distributor::shutdown() {
     should_stop = true;
     task_available_cv.notify_all();
     wait_for_completion();
 }
 
+// ============================================================================
+// Add submission
+// ============================================================================
+
 void Distributor::add_submission(const SubmissionInfo& submission_info) {
     int task_id = submission_info.task_id;
+    cout<<"[Distributor] Adding submission "<<submission_info.submission_id<<" for task "<<task_id<<endl;
 
-    for (int i = 0; i < (int)tasks_dependency_counts[task_id].size(); ++i) {
-        int deg_count = tasks_dependency_counts[task_id][i];
+    for (int i = 0; i < (int)taskData[task_id].subtask.size(); ++i) {
+        /* int deg_count = tasks_dependency_counts[task_id][i];
         
         {
             lock_guard<mutex> lock(dependencies_mutex);
             submission_dependencies[submission_info.submission_id][i] = deg_count;
-        }
+        } */
+
+        int deg_count = 0;
         
         if (deg_count == 0) {
             {
@@ -124,41 +160,22 @@ void Distributor::add_submission(const SubmissionInfo& submission_info) {
                 task_queue.push({
                     submission_info.user_id,
                     submission_info.submission_id,
-                    TaskDetail{
-                        task_id,
-                        i,
-                        1,
-                        0,
-                        submission_info.executable_path
-                    }
+                    TaskDetail{ task_id, i, 1, 0, submission_info.executable_path }
                 });
+                cout<<"[Distributor] Added submission "<<submission_info.submission_id<<" to task "<<task_id<<" subtask "<<i<<endl;
             }
             task_available_cv.notify_one();
         }
     }
 }
 
-void Distributor::test_send_exe(string executable_path) {
-    vector<char> executable_data;
-    ifstream exe_file(executable_path, ios::binary | ios::ate);
-    if (exe_file) {
-        size_t executable_size = exe_file.tellg();
-        exe_file.seekg(0, ios::beg);
-        executable_data.resize(executable_size);
-        exe_file.read(executable_data.data(), executable_size);
-        exe_file.close();
-    } else {
-        cerr << "Error: Cannot open executable file: " << executable_path << endl;
-        return;
-    }
-
-    TaskMessage task_message = {1,1,1,1,(int)executable_data.size()};
-    sendTaskMessage(task_message, executable_data, worker_data_sockets[0]);
-    cout << "Sent executable to worker" << endl;
-}
+// ============================================================================
+// Worker communication loop
+// ============================================================================
 
 void Distributor::worker_communication_loop(int worker_data_socket, int worker_control_socket) {
     assert(worker_data_socket >= 0 && worker_control_socket >= 0);
+
     while (!should_stop) {
 
         bool has_task = false;
@@ -174,13 +191,19 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
             if (should_stop && task_queue.empty()) break;
             
             if (!task_queue.empty()) {
-                task = task_queue.front();
+                task = move(task_queue.front());
                 task_queue.pop();
                 has_task = true;
             }
         }
 
-        if (!has_task) continue;
+        if (!has_task) {
+            continue;
+        }
+
+        cout << "[Distributor] Data socket:" << worker_data_socket << " Processing submission " << task.submission_id 
+            << " for task " << task.task_detail.task_id 
+            << " subtask " << task.task_detail.subtask_id << "\n";
 
         string executable_path = task.task_detail.executable_path;
 
@@ -204,10 +227,13 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
             task.task_detail.r,
             (int)executable_data.size()
         };
-
+        
         sendTaskMessage(task_message, executable_data, worker_data_socket);
 
         Result result = receiveResult(worker_data_socket);
+        cout << "[Distributor] Data socket:" << worker_data_socket << " Received result for submission " << task.submission_id 
+            << " for task " << task.task_detail.task_id 
+            << " subtask " << task.task_detail.subtask_id << "\n";
 
         {
             lock_guard<mutex> lock(output_fd_mutex);
@@ -224,6 +250,8 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
                 fsync(output_fd);
             }
         }
+
+        continue; // TODO: remove this -> This is only for testing the distributor, not the checker (code executor)
 
         if (result.is_accepted) {
             

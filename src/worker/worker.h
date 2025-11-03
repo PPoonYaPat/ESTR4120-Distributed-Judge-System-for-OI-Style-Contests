@@ -22,7 +22,6 @@ public:
     void start();
     void init_task(string testcase_config_path);
     void receive_testcase();
-    void test_receive_exe();
 };
 
 #endif // WORKER_H

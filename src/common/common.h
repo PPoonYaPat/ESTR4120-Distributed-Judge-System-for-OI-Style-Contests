@@ -24,7 +24,7 @@ struct Result {
 struct TaskMessage {
     int task_id;
     int subtask_id;
-    int mod,r;
+    int mod, r;
     int executable_size; // size of the executable file in bytes
     // every subtask_id that %mod==r will be assigned to this worker
     // After this struct, executable_size bytes of executable binary data will be sent
@@ -52,9 +52,5 @@ struct MachineAddress {
     in_addr_t address;
     uint16_t listening_port;
 };
-
-void sendResult(const Result& result, int socket);
-
-Result receiveResult(int socket);
 
 #endif // COMMON_H

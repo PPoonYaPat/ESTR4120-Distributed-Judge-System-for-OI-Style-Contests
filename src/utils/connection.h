@@ -1,20 +1,15 @@
 #ifndef CONNECTION_H
 #define CONNECTION_H
 
-#include <cstdint>
-#include <netinet/in.h>
 #include "../common/common.h"
+#include "base_connection.h"
 #include <bits/stdc++.h>
-#include <arpa/inet.h>
+
 using namespace std;
 
-// return fd on TCP connection success
-// otherwise return -1
-string ip_to_string(in_addr_t address);
-int listen_on_port(uint16_t listen_port);
-int accept_connection(int sockfd);
-int connect_to(in_addr_t address, uint16_t remote_port);
-
+// ============================================================================
+// Task Message Protocol
+// ============================================================================
 
 // Send TaskMessage with executable file to a worker
 // task_message: The task message with executable_size field set
@@ -22,14 +17,29 @@ int connect_to(in_addr_t address, uint16_t remote_port);
 // socket: The socket to send to
 void sendTaskMessage(const TaskMessage& task_message, const vector<char>& executable_data, int socket);
 
-// Receive TaskMessage with executable file from a worker
+// Receive TaskMessage with executable file from distributor
 // socket: The socket to receive from
-// Returns: pair containing (TaskMessage with network byte order converted, executable_data)
-// Returns empty vector and invalid TaskMessage if receive fails
+// Returns: pair containing (TaskMessage, executable_data)
 pair<TaskMessage, vector<char>> receiveTaskMessage(int socket);
 
-// Send text files (testcase_config and testcases) to the worker
-void send_file(int fd, string input_path, string output_path);
-void receive_file(int fd);
+// ============================================================================
+// Result Protocol
+// ============================================================================
 
-#endif
+// Send a Result to distributor
+void sendResult(const Result& result, int socket);
+
+// Receive a Result from worker
+Result receiveResult(int socket);
+
+// ============================================================================
+// File Transfer Protocol
+// ============================================================================
+
+// Send a file from input_path and specify where it should be saved (output_path)
+void send_file(int socket, const string& input_path, const string& output_path);
+
+// Receive a file and save it to the path specified by sender
+void receive_file(int socket);
+
+#endif // CONNECTION_H

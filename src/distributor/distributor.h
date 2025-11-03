@@ -53,7 +53,6 @@ private:
 
     // Private methods
     void worker_communication_loop(int worker_data_socket, int worker_control_socket);
-    void init_task(string testcase_config_path);
 
 public:
     Distributor(int output_FD, vector<MachineAddress> machine_addresses);
@@ -62,8 +61,8 @@ public:
     void wait_for_completion();
     void shutdown();
     void add_submission(const SubmissionInfo& submission_info);
-    void test_send_exe(string executable_path);
     void send_testcase(string file_config_path);
+    void init_task(string testcase_config_path);
 };
 
 #endif // DISTRIBUTOR_H

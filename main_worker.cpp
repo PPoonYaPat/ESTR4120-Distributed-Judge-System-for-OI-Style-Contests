@@ -7,5 +7,7 @@ int main(int argc, char* argv[]) {
     int listening_port=atoi(argv[1]);
 
     Worker worker(listening_port);
-    worker.receive_testcase();
+    // worker.receive_testcase();
+    worker.init_task("testcase_config.json");
+    worker.start();
 }
