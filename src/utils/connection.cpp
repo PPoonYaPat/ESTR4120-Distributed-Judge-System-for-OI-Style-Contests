@@ -153,3 +153,129 @@ pair<TaskMessage, vector<char>> receiveTaskMessage(int socket) {
     
     return make_pair(msg_converted, executable_data);
 }
+
+void send_file(int fd, string input_path, string output_path) {
+    // Open the file to send
+    ifstream input_file(input_path, ios::binary | ios::ate);
+    if (!input_file) {
+        cerr << "[send_file] Error: Cannot open file: " << input_path << endl;
+        // Send error indicator
+        uint32_t output_path_len = 0;
+        send(fd, &output_path_len, sizeof(output_path_len), 0);
+        return;
+    }
+    
+    // Get file size
+    size_t file_size = input_file.tellg();
+    input_file.seekg(0, ios::beg);
+    
+    // Read file data
+    vector<char> file_data(file_size);
+    input_file.read(file_data.data(), file_size);
+    input_file.close();
+    
+    // 1. Send output_path length (network byte order)
+    uint32_t output_path_len = htonl(output_path.length());
+    send(fd, &output_path_len, sizeof(output_path_len), 0);
+    
+    // 2. Send output_path string
+    send(fd, output_path.c_str(), output_path.length(), 0);
+    
+    // 3. Send file size (network byte order)
+    uint32_t file_size_network = htonl(file_size);
+    send(fd, &file_size_network, sizeof(file_size_network), 0);
+    
+    // 4. Send file data
+    size_t total_sent = 0;
+    while (total_sent < file_size) {
+        ssize_t bytes = send(fd, file_data.data() + total_sent, 
+                            file_size - total_sent, 0);
+        if (bytes <= 0) {
+            perror("[send_file] send file data");
+            return;
+        }
+        total_sent += bytes;
+    }
+    
+    cerr << "[send_file] Sent " << file_size << " bytes from " 
+         << input_path << " -> " << output_path << endl;
+}
+
+void receive_file(int fd) {
+    // 1. Receive output_path length
+    uint32_t output_path_len_network;
+    ssize_t bytes = recv(fd, &output_path_len_network, sizeof(output_path_len_network), 0);
+    if (bytes <= 0) {
+        cerr << "[receive_file] Error: Failed to receive path length" << endl;
+        return;
+    }
+    
+    uint32_t output_path_len = ntohl(output_path_len_network);
+    
+    // Check for error indicator (length = 0)
+    if (output_path_len == 0) {
+        cerr << "[receive_file] Error: Sender failed to open file" << endl;
+        return;
+    }
+    
+    // 2. Receive output_path string
+    vector<char> path_buffer(output_path_len);
+    size_t total_received = 0;
+    while (total_received < output_path_len) {
+        bytes = recv(fd, path_buffer.data() + total_received, 
+                    output_path_len - total_received, 0);
+        if (bytes <= 0) {
+            cerr << "[receive_file] Error: Failed to receive path" << endl;
+            return;
+        }
+        total_received += bytes;
+    }
+    string output_path(path_buffer.begin(), path_buffer.end());
+    
+    // 3. Receive file size
+    uint32_t file_size_network;
+    bytes = recv(fd, &file_size_network, sizeof(file_size_network), 0);
+    if (bytes <= 0) {
+        cerr << "[receive_file] Error: Failed to receive file size" << endl;
+        return;
+    }
+    
+    uint32_t file_size = ntohl(file_size_network);
+    
+    // 4. Receive file data
+    vector<char> file_data(file_size);
+    total_received = 0;
+    while (total_received < file_size) {
+        bytes = recv(fd, file_data.data() + total_received, 
+                    file_size - total_received, 0);
+        if (bytes <= 0) {
+            cerr << "[receive_file] Error: Failed to receive file data" << endl;
+            return;
+        }
+        total_received += bytes;
+    }
+    
+    // 5. Create directory if needed
+    size_t last_slash = output_path.find_last_of('/');
+    if (last_slash != string::npos) {
+        string dir = output_path.substr(0, last_slash);
+        int result = system(("mkdir -p " + dir).c_str());
+        if (result != 0) {
+            cerr << "[receive_file] Error: Failed to create directory: " << dir << endl;
+            return;
+        }
+    }
+    
+    // 6. Write file to disk
+    ofstream output_file(output_path, ios::binary);
+    if (!output_file) {
+        cerr << "[receive_file] Error: Cannot create file: " << output_path << endl;
+        return;
+    }
+    
+    output_file.write(file_data.data(), file_size);
+    output_file.close();
+    
+    cerr << "[receive_file] Received " << file_size << " bytes -> " 
+         << output_path << endl;
+}

@@ -7,10 +7,9 @@ using namespace std;
 int main() {
     vector<MachineAddress> machine_addresses = {
         {htonl(INADDR_LOOPBACK), 9999},
-        {htonl(INADDR_LOOPBACK), 8888},
+        //{htonl(INADDR_LOOPBACK), 8888},
     };
 
     Distributor distributor(STDOUT_FILENO, machine_addresses);
-    distributor.test_send_exe("temp");
-    
+    distributor.send_testcase("test1.json");
 }

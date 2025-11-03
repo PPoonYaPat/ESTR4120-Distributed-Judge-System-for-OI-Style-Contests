@@ -19,8 +19,7 @@
 using json = nlohmann::json;
 using namespace std;
 
-Worker::Worker(string testcase_config_path, int listening_port) : early_termination(false) {
-    init_task(testcase_config_path);
+Worker::Worker(int listening_port) : early_termination(false) {
 
     int listening_socket = listen_on_port(listening_port);
     if (listening_socket == -1) {
@@ -49,63 +48,77 @@ Worker::Worker(string testcase_config_path, int listening_port) : early_terminat
 }
 
 void Worker::start() {
-        thread control_thread(&Worker::controlMessageListener, this);
-        thread process_thread(&Worker::processTasksLoop, this);
+    thread control_thread(&Worker::controlMessageListener, this);
+    thread process_thread(&Worker::processTasksLoop, this);
 
-        control_thread.join();
-        process_thread.join();
+    control_thread.join();
+    process_thread.join();
+}
+
+void Worker::receive_testcase() {
+    receive_file(data_socket);
+    init_task("testcase_config.json");
+
+    for (auto task : taskData) {
+        for (auto subtask : task.subtask) {
+            for (auto testcase : subtask.testcase) {
+                receive_file(data_socket);
+                receive_file(data_socket);
+                cout<<"Received testcase "<<testcase.input_path<<" and "<<testcase.expected_output_path<<" from distributor"<<endl;
+            }
+        }
     }
+}
 
 void Worker::init_task(string testcase_config_path) {
-        ifstream file(testcase_config_path);
-        
-        if (!file.is_open()) {
-            cerr << "Error: Cannot open testcase.json" << endl;
-            exit(1);
-        }
+    ifstream file(testcase_config_path);
+    
+    if (!file.is_open()) {
+        cerr << "Error: Cannot open testcase.json" << endl;
+        exit(1);
+    }
 
-        json config;
-        file >> config;
-        file.close();
+    json config;
+    file >> config;
+    file.close();
 
-        taskData.clear();
-        for (auto& task_json : config["tasks"]) {
-            Task task;
-            task.task_id = task_json["task_id"];
-            task.memory_limit = task_json["memory_limit"];
-            task.time_limit = task_json["time_limit"];
+    taskData.clear();
+    for (auto& task_json : config["tasks"]) {
+        Task task;
+        task.task_id = task_json["task_id"];
+        task.memory_limit = task_json["memory_limit"];
+        task.time_limit = task_json["time_limit"];
 
-            for (auto& subtask_json : task_json["subtasks"]) {
-                Subtask subtask;
-                subtask.task_id = task_json["task_id"];
-                subtask.subtask_id = subtask_json["subtask_id"];
+        for (auto& subtask_json : task_json["subtasks"]) {
+            Subtask subtask;
+            subtask.task_id = task_json["task_id"];
+            subtask.subtask_id = subtask_json["subtask_id"];
 
-                for (auto& testcase_json : subtask_json["testcases"]) {
-                    Testcase testcase;
-                    testcase.input_path = testcase_json["input_path"];
-                    testcase.expected_output_path = testcase_json["expected_output_path"];
-                    testcase.output_path = testcase_json["output_path"];
-                    subtask.testcase.push_back(testcase);
-                }
-
-                task.subtask.push_back(subtask);
+            for (auto& testcase_json : subtask_json["testcases"]) {
+                Testcase testcase;
+                testcase.input_path = testcase_json["input_path"];
+                testcase.expected_output_path = testcase_json["expected_output_path"];
+                subtask.testcase.push_back(testcase);
             }
 
-            taskData.push_back(task);
+            task.subtask.push_back(subtask);
         }
+
+        taskData.push_back(task);
     }
+}
 
 void Worker::controlMessageListener() {
-        while (true) {
-            char buffer[1024];
-            int bytes = recv(control_socket, buffer, 1024, 0);
-            if (bytes<=0) break;
+    while (true) {
+        char buffer[1024];
+        int bytes = recv(control_socket, buffer, 1024, 0);
+        if (bytes<=0) break;
 
-            cout<<"[Control Thread] Received early termination signal"<<endl;
-            early_termination = true;
-            break;
-        }
+        cout<<"[Control Thread] Received early termination signal"<<endl;
+        early_termination = true;
+        break;
     }
+}
 
 void Worker::test_receive_exe() {
     auto [task_message, executable_data] = receiveTaskMessage(data_socket);

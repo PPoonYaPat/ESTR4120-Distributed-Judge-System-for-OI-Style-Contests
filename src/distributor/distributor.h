@@ -30,7 +30,8 @@ struct MachineAddress; // Forward declaration from common.h
 
 class Distributor {
 private:
-    int output_fd;
+    int output_fd, cnt_worker;
+    vector<MachineAddress> machine_addresses;
     mutex output_fd_mutex;
 
     vector<int> worker_data_sockets,worker_control_sockets;
@@ -48,18 +49,21 @@ private:
     mutex dependencies_mutex;
     map<int, map<int, int>> submission_dependencies;
 
+    vector<Task> taskData;
+
     // Private methods
     void worker_communication_loop(int worker_data_socket, int worker_control_socket);
+    void init_task(string testcase_config_path);
 
 public:
     Distributor(int output_FD, vector<MachineAddress> machine_addresses);
     
-    void init_tasks_dependencies();
     void start();
     void wait_for_completion();
     void shutdown();
     void add_submission(const SubmissionInfo& submission_info);
     void test_send_exe(string executable_path);
+    void send_testcase(string file_config_path);
 };
 
 #endif // DISTRIBUTOR_H

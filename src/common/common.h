@@ -30,6 +30,24 @@ struct TaskMessage {
     // After this struct, executable_size bytes of executable binary data will be sent
 };
 
+struct Testcase {
+    string input_path;
+    string expected_output_path;
+};
+
+struct Subtask {
+    int task_id;
+    int subtask_id;
+    vector<Testcase> testcase;
+};
+
+struct Task {
+    int task_id;
+    int memory_limit;
+    int time_limit;
+    vector<Subtask> subtask;
+};
+
 struct MachineAddress {
     in_addr_t address;
     uint16_t listening_port;

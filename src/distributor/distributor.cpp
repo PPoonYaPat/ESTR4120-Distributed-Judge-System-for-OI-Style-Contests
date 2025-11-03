@@ -1,14 +1,17 @@
 #include "Distributor.h"
 #include "../common/common.h"
 #include "../utils/connection.h"
-#include <iostream>
-#include <fstream>
 #include <unistd.h>
+#include <nlohmann/json.hpp>
+#include <bits/stdc++.h>
 
+using json = nlohmann::json;
 using namespace std;
 
 Distributor::Distributor(int output_FD, vector<MachineAddress> machine_addresses) : should_stop(false) {
     output_fd = output_FD;
+    cnt_worker = (int)machine_addresses.size();
+    this->machine_addresses = machine_addresses;
     for (auto machine_address : machine_addresses) {
         int worker_data_socket=connect_to(machine_address.address, machine_address.listening_port);
         if (worker_data_socket == -1) {
@@ -28,8 +31,60 @@ Distributor::Distributor(int output_FD, vector<MachineAddress> machine_addresses
     }
 }
 
-void Distributor::init_tasks_dependencies() {
-    // Implementation here
+void Distributor::send_testcase(string file_config_path) {
+    init_task(file_config_path);
+
+    for (int i=0; i<cnt_worker; ++i) {
+        send_file(worker_data_sockets[i], file_config_path, "testcase_config.json");
+        for (auto task : taskData) {
+            for (auto subtask : task.subtask) {
+                for (auto testcase : subtask.testcase) {
+                    send_file(worker_data_sockets[i], testcase.input_path, testcase.input_path);
+                    send_file(worker_data_sockets[i], testcase.expected_output_path, testcase.expected_output_path);
+                    cout<<"Sent testcase "<<testcase.input_path<<" and "<<testcase.expected_output_path<<" to worker "
+                    <<ip_to_string(machine_addresses[i].address)<<":"<<machine_addresses[i].listening_port<<"\n";
+                }
+            }
+        }
+    }
+}
+
+void Distributor::init_task(string testcase_config_path) {
+    ifstream file(testcase_config_path);
+    
+    if (!file.is_open()) {
+        cerr << "Error: Cannot open testcase.json" << endl;
+        exit(1);
+    }
+
+    json config;
+    file >> config;
+    file.close();
+
+    taskData.clear();
+    for (auto& task_json : config["tasks"]) {
+        Task task;
+        task.task_id = task_json["task_id"];
+        task.memory_limit = task_json["memory_limit"];
+        task.time_limit = task_json["time_limit"];
+
+        for (auto& subtask_json : task_json["subtasks"]) {
+            Subtask subtask;
+            subtask.task_id = task_json["task_id"];
+            subtask.subtask_id = subtask_json["subtask_id"];
+
+            for (auto& testcase_json : subtask_json["testcases"]) {
+                Testcase testcase;
+                testcase.input_path = testcase_json["input_path"];
+                testcase.expected_output_path = testcase_json["expected_output_path"];
+                subtask.testcase.push_back(testcase);
+            }
+
+            task.subtask.push_back(subtask);
+        }
+
+        taskData.push_back(task);
+    }
 }
 
 void Distributor::start() {

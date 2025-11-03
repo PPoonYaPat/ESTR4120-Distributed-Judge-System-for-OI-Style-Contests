@@ -28,4 +28,8 @@ void sendTaskMessage(const TaskMessage& task_message, const vector<char>& execut
 // Returns empty vector and invalid TaskMessage if receive fails
 pair<TaskMessage, vector<char>> receiveTaskMessage(int socket);
 
+// Send text files (testcase_config and testcases) to the worker
+void send_file(int fd, string input_path, string output_path);
+void receive_file(int fd);
+
 #endif

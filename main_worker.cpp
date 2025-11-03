@@ -6,6 +6,6 @@ int main(int argc, char* argv[]) {
     assert(argc==2);
     int listening_port=atoi(argv[1]);
 
-    Worker worker("../example_config.json", listening_port);
-    worker.test_receive_exe();
+    Worker worker(listening_port);
+    worker.receive_testcase();
 }
