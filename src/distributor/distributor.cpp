@@ -3,10 +3,9 @@
 #include "../utils/connection.h"
 #include "../utils/base_connection.h"
 #include <unistd.h>
-#include <nlohmann/json.hpp>
+#include "../common/jsonProcess.h"
 #include <bits/stdc++.h>
 
-using json = nlohmann::json;
 using namespace std;
 
 // ============================================================================
@@ -67,41 +66,8 @@ void Distributor::send_testcase(string file_config_path) {
 // ============================================================================
 
 void Distributor::init_task(string testcase_config_path) {
-    ifstream file(testcase_config_path);
-    
-    if (!file.is_open()) {
-        cerr << "Error: Cannot open testcase.json" << endl;
-        exit(1);
-    }
-
-    json config;
-    file >> config;
-    file.close();
-
-    taskData.clear();
-    for (auto& task_json : config["tasks"]) {
-        Task task;
-        task.task_id = task_json["task_id"];
-        task.memory_limit = task_json["memory_limit"];
-        task.time_limit = task_json["time_limit"];
-
-        for (auto& subtask_json : task_json["subtasks"]) {
-            Subtask subtask;
-            subtask.task_id = task_json["task_id"];
-            subtask.subtask_id = subtask_json["subtask_id"];
-
-            for (auto& testcase_json : subtask_json["testcases"]) {
-                Testcase testcase;
-                testcase.input_path = testcase_json["input_path"];
-                testcase.expected_output_path = testcase_json["expected_output_path"];
-                subtask.testcase.push_back(testcase);
-            }
-
-            task.subtask.push_back(subtask);
-        }
-
-        taskData.push_back(task);
-    }
+    read_json(testcase_config_path, taskData);    
+    init_dependencies(taskData, tasks_dependency_counts, tasks_dependency_edges);
 }
 
 // ============================================================================
@@ -145,25 +111,26 @@ void Distributor::add_submission(const SubmissionInfo& submission_info) {
     cout<<"[Distributor] Adding submission "<<submission_info.submission_id<<" for task "<<task_id<<endl;
 
     for (int i = 0; i < (int)taskData[task_id].subtask.size(); ++i) {
-        /* int deg_count = tasks_dependency_counts[task_id][i];
-        
+        int deg_count = tasks_dependency_counts[task_id][i];
+        int mod = taskData[task_id].subtask[i].mod;
+
         {
             lock_guard<mutex> lock(dependencies_mutex);
             submission_dependencies[submission_info.submission_id][i] = deg_count;
-        } */
-
-        int deg_count = 0;
+        }
         
         if (deg_count == 0) {
             {
                 lock_guard<mutex> lock(submission_queue_mutex);
-                task_queue.push({
-                    submission_info.user_id,
-                    submission_info.submission_id,
-                    TaskDetail{ task_id, i, 1, 0, submission_info.executable_path }
-                });
-                cout<<"[Distributor] Added submission "<<submission_info.submission_id<<" to task "<<task_id<<" subtask "<<i<<endl;
+                for (int j=0; j<mod; ++j) {
+                    task_queue.push({
+                        submission_info.user_id,
+                        submission_info.submission_id,
+                        TaskDetail{ task_id, i, mod, j, submission_info.executable_path }
+                    });
+                }
             }
+            cout<<"[Distributor] Added submission "<<submission_info.submission_id<<" to task "<<task_id<<" subtask "<<i<<endl;
             task_available_cv.notify_one();
         }
     }
@@ -243,15 +210,13 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
 
                 for (size_t i = 0; i < result.test_output.size(); ++i) {
                     const auto& out = result.test_output[i];
-                    dprintf(output_fd, "  Test #%zu: verdict=%s, time=%d ms, memory=%d MB\n",
+                    dprintf(output_fd, "  Test #%zu: verdict=%s, time=%ld ms, memory=%ld MB\n",
                             i+1, out.verdict.c_str(), out.time_usage, out.memory_usage);
                 }
 
                 fsync(output_fd);
             }
         }
-
-        continue; // TODO: remove this -> This is only for testing the distributor, not the checker (code executor)
 
         if (result.is_accepted) {
             
@@ -264,20 +229,27 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
                 }
 
                 if (remaining == 0) {
+
+                    int mod = taskData[task.task_detail.task_id].subtask[s].mod;
+
                     {
                         lock_guard<mutex> lock(submission_queue_mutex);
-                        task_queue.push({
-                            task.user_id,
-                            task.submission_id,
-                            TaskDetail{
-                                task.task_detail.task_id,
-                                s,
-                                task.task_detail.mod,
-                                task.task_detail.r,
-                                task.task_detail.executable_path
-                            }
-                        });
+                        for (int j=0; j<mod; ++j) {
+                            task_queue.push({
+                                task.user_id,
+                                task.submission_id,
+                                TaskDetail{
+                                    task.task_detail.task_id,
+                                    s,
+                                    task.task_detail.mod,
+                                    j,
+                                    task.task_detail.executable_path
+                                }
+                            });
+                        }
                     }
+                    cout<<"[Distributor] All dependencies of submission "<<task.submission_id<<" for task "<<task.task_detail.task_id<<" subtask "<<s<<" are satisfied"<<endl;
+                    cout<<"[Distributor] Added submission "<<task.submission_id<<" to task "<<task.task_detail.task_id<<" subtask "<<s<<endl;
                     task_available_cv.notify_one();
                 }
             }

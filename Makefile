@@ -27,10 +27,10 @@ $(BIN_DIR):
 # Binaries
 # ============================================================================
 
-$(BIN_DIR)/worker: $(OBJ_DIR)/main_worker.o $(OBJ_DIR)/worker.o  $(OBJ_DIR)/base_connection.o $(OBJ_DIR)/connection.o | $(BIN_DIR)
+$(BIN_DIR)/worker: $(OBJ_DIR)/main_worker.o $(OBJ_DIR)/worker.o  $(OBJ_DIR)/base_connection.o $(OBJ_DIR)/connection.o $(OBJ_DIR)/executor.o $(OBJ_DIR)/jsonProcess.o | $(BIN_DIR)
 	$(CXX) $^ -o $@ $(LDFLAGS)
 
-$(BIN_DIR)/distributor: $(OBJ_DIR)/main_distributor.o $(OBJ_DIR)/distributor.o  $(OBJ_DIR)/base_connection.o $(OBJ_DIR)/connection.o | $(BIN_DIR)
+$(BIN_DIR)/distributor: $(OBJ_DIR)/main_distributor.o $(OBJ_DIR)/distributor.o  $(OBJ_DIR)/base_connection.o $(OBJ_DIR)/connection.o $(OBJ_DIR)/jsonProcess.o | $(BIN_DIR)
 	$(CXX) $^ -o $@ $(LDFLAGS)
 
 # ============================================================================
@@ -41,14 +41,23 @@ $(OBJ_DIR)/main_worker.o: main_worker.cpp \
                           $(WORKER_DIR)/worker.h \
                           $(COMMON_DIR)/common.h \
                           $(UTILS_DIR)/connection.h \
-                          $(UTILS_DIR)/base_connection.h | $(OBJ_DIR)
+                          $(UTILS_DIR)/base_connection.h \
+                          $(COMMON_DIR)/jsonProcess.h | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/main_distributor.o: main_distributor.cpp \
                                $(DIST_DIR)/distributor.h \
                                $(COMMON_DIR)/common.h \
                                $(UTILS_DIR)/connection.h \
-                               $(UTILS_DIR)/base_connection.h | $(OBJ_DIR)
+                               $(UTILS_DIR)/base_connection.h \
+                               $(COMMON_DIR)/jsonProcess.h | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# ============================================================================
+# Common module
+# ============================================================================
+
+$(OBJ_DIR)/jsonProcess.o: $(COMMON_DIR)/jsonProcess.cpp $(COMMON_DIR)/jsonProcess.h | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ============================================================================
@@ -72,7 +81,8 @@ $(OBJ_DIR)/distributor.o: $(DIST_DIR)/distributor.cpp \
                           $(DIST_DIR)/distributor.h \
                           $(COMMON_DIR)/common.h \
                           $(UTILS_DIR)/connection.h \
-                          $(UTILS_DIR)/base_connection.h | $(OBJ_DIR)
+                          $(UTILS_DIR)/base_connection.h \
+                          $(COMMON_DIR)/jsonProcess.h | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ============================================================================
@@ -83,7 +93,14 @@ $(OBJ_DIR)/worker.o: $(WORKER_DIR)/worker.cpp \
                      $(WORKER_DIR)/worker.h \
                      $(COMMON_DIR)/common.h \
                      $(UTILS_DIR)/connection.h \
-                     $(UTILS_DIR)/base_connection.h | $(OBJ_DIR)
+                     $(UTILS_DIR)/base_connection.h \
+                     $(WORKER_DIR)/executor.h \
+                     $(COMMON_DIR)/jsonProcess.h | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/executor.o: $(WORKER_DIR)/executor.cpp \
+                     $(WORKER_DIR)/executor.h \
+                     $(COMMON_DIR)/common.h | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # ============================================================================

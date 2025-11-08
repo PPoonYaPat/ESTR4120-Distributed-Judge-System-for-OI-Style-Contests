@@ -26,8 +26,6 @@ struct SubgroupTask {
     TaskDetail task_detail;
 };
 
-struct MachineAddress; // Forward declaration from common.h
-
 class Distributor {
 private:
     int output_fd, cnt_worker;

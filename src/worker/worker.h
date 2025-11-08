@@ -9,13 +9,12 @@ class Worker {
 private:
     int data_socket;
     int control_socket;
-    atomic<bool> early_termination;
+    atomic<bool> early_termination, should_stop;
     vector<Task> taskData;
 
     // Private methods
     void controlMessageListener();
     void processTasksLoop();
-    Output execute_code(Testcase testcase, int time_limit, int memory_limit, string executable_path);
 
 public:
     Worker(int listening_port);

@@ -55,9 +55,7 @@ pair<TaskMessage, vector<char>> receiveTaskMessage(int socket) {
 // ============================================================================
 
 void sendResult(const Result& result, int socket) {
-    cout << "[sendResult] Sending result: task_id=" << result.task_id 
-         << " subtask_id=" << result.subtask_id 
-         << " num_outputs=" << result.test_output.size() << endl;
+    cout << "[sendResult] Sending result: task_id=" << result.task_id << " subtask_id=" << result.subtask_id << " num_outputs=" << result.test_output.size() << endl;
     
     // Send header fields
     send_int(socket, result.task_id);
@@ -67,17 +65,17 @@ void sendResult(const Result& result, int socket) {
     send_int(socket, result.is_accepted ? 1 : 0);
     send_int(socket, result.test_output.size());
     
-    cout << "[sendResult] Header sent" << endl;
-    
     // Send each Output
+    cout << "[sendResult] Sending " << result.test_output.size() << " outputs" << endl;
+    int idx=0;
     for (const auto& output : result.test_output) {
         send_int(socket, output.time_usage);
         send_int(socket, output.memory_usage);
         send_string(socket, output.verdict);
         send_string(socket, output.user_output);
         
-        cout << "[sendResult] Sent output: verdict='" << output.verdict 
-             << "' (" << output.verdict.size() << " bytes)" << endl;
+        cout << "[sendResult] Sent output " << idx << ": verdict='" << output.verdict << "' (" << output.verdict.size() << " bytes)" << endl;
+        idx++;
     }
     
     cout << "[sendResult] Complete result sent!" << endl;
@@ -86,9 +84,6 @@ void sendResult(const Result& result, int socket) {
 
 Result receiveResult(int socket) {
     Result result;
-    
-    cout << "[receiveResult] Receiving header..." << endl;
-    cout.flush();
     
     try {
         // Receive header fields
@@ -99,15 +94,11 @@ Result receiveResult(int socket) {
         result.is_accepted = (recv_int(socket) == 1);
         int count = recv_int(socket);
         
-        cout << "[receiveResult] Header received: task_id=" << result.task_id 
-             << " subtask_id=" << result.subtask_id 
-             << " count=" << count << endl;
+        cout << "[receiveResult] Receiving result: task_id=" << result.task_id << " subtask_id=" << result.subtask_id << " num_outputs=" << count << endl;
         cout.flush();
         
         // Receive each Output
         for (int i = 0; i < count; i++) {
-            cout << "[receiveResult] Receiving output " << i << endl;
-            cout.flush();
             
             Output output;
             output.time_usage = recv_int(socket);
@@ -115,13 +106,13 @@ Result receiveResult(int socket) {
             output.verdict = recv_string(socket);
             output.user_output = recv_string(socket);
             
-            cout << "[receiveResult] Received output: verdict='" << output.verdict << "'" << endl;
+            cout << "[receiveResult] Received output " << i << ": verdict='" << output.verdict << "'" << endl;
             cout.flush();
             
             result.test_output.push_back(output);
         }
         
-        cout << "[receiveResult] Successfully received complete result!" << endl;
+        cout << "[receiveResult] Successfully received complete result from task " << result.task_id << " subtask " << result.subtask_id << endl;
         cout.flush();
         
     } catch (const runtime_error& e) {

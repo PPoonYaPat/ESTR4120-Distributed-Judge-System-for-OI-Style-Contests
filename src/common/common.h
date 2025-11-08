@@ -6,8 +6,8 @@
 using namespace std;
 
 struct Output {
-    int time_usage;
-    int memory_usage;
+    long time_usage;
+    long memory_usage;
     string verdict; // correct, WA, TLE, MLE, RE, ...
     string user_output;
 };
@@ -15,8 +15,8 @@ struct Output {
 struct Result {
     int task_id;
     int subtask_id;
-    int maximum_time;
-    int maximum_memory;
+    long maximum_time;
+    long maximum_memory;
     bool is_accepted;
     vector<Output> test_output;
 };
@@ -38,6 +38,8 @@ struct Testcase {
 struct Subtask {
     int task_id;
     int subtask_id;
+    int mod; // %mod will be assigned to this worker
+    vector<int> dependencies; // subtasks that this subtask depends on
     vector<Testcase> testcase;
 };
 
