@@ -19,8 +19,7 @@ private:
 public:
     Worker(int listening_port);
     void start();
-    void init_task(string testcase_config_path);
-    void receive_testcase();
+    void init_task(bool receive_testcase_files = false);
 };
 
 #endif // WORKER_H

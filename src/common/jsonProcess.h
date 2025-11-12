@@ -7,6 +7,8 @@ using namespace std;
 
 void read_json(string testcase_config_path, vector<Task> &taskData);
 
+void read_json_auto_detect(string testcase_config_path, vector<string> testcase_dirs, vector<Task> &taskData);
+
 void init_dependencies(vector<Task> &taskData, vector<vector<int>> &dependency_counts, vector<vector<vector<int>>> &dependency_edges);
 
 #endif

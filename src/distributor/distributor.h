@@ -31,6 +31,7 @@ private:
     int output_fd, cnt_worker;
     vector<MachineAddress> machine_addresses;
     mutex output_fd_mutex;
+    string testcase_config_path;
 
     vector<int> worker_data_sockets,worker_control_sockets;
     vector<thread> worker_threads;
@@ -49,18 +50,23 @@ private:
 
     vector<Task> taskData;
 
+    vector<pair<int,int>> worker_status; // (worker_index)->(submission_id, subtask_id)
+    mutex worker_status_mutex;
+
     // Private methods
-    void worker_communication_loop(int worker_data_socket, int worker_control_socket);
+    void worker_communication_loop(int worker_data_socket, int worker_control_socket, int worker_index);
+    void wait_for_completion();
+    void send_testcases(bool send_testcase_files);
 
 public:
     Distributor(int output_FD, vector<MachineAddress> machine_addresses);
     
     void start();
-    void wait_for_completion();
     void shutdown();
     void add_submission(const SubmissionInfo& submission_info);
-    void send_testcase(string file_config_path);
-    void init_task(string testcase_config_path);
+    void init_task(string testcase_config_path, bool send_testcase_files = false);
+    void init_task_auto_detect(string testcase_config_path, vector<string> testcase_dirs, bool send_testcase_files = false);
+    void wait_until_all_done();
 };
 
 #endif // DISTRIBUTOR_H

@@ -42,4 +42,10 @@ void send_file(int socket, const string& input_path, const string& output_path);
 // Receive a file and save it to the path specified by sender
 void receive_file(int socket);
 
+// Send task details to worker
+void send_task_details(int socket, vector<Task>& taskData);
+
+// Receive task details from distributor
+void receive_task_details(int socket, vector<Task>& taskData);
+
 #endif // CONNECTION_H

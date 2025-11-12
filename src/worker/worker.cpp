@@ -1,4 +1,4 @@
-#include "Worker.h"
+#include "worker.h"
 #include "../utils/connection.h"
 #include "executor.h"
 #include "../common/common.h"
@@ -65,30 +65,22 @@ void Worker::start() {
 }
 
 // ============================================================================
-// Receive testcase
-// ============================================================================
-
-void Worker::receive_testcase() {
-    receive_file(data_socket);
-    init_task("testcase_config.json");
-
-    for (auto task : taskData) {
-        for (auto subtask : task.subtask) {
-            for (auto testcase : subtask.testcase) {
-                receive_file(data_socket);
-                receive_file(data_socket);
-                cout<<"Received testcase "<<testcase.input_path<<" and "<<testcase.expected_output_path<<" from distributor"<<endl;
-            }
-        }
-    }
-}
-
-// ============================================================================
 // Initialize task
 // ============================================================================
 
-void Worker::init_task(string testcase_config_path) {
-    read_json(testcase_config_path, taskData);
+void Worker::init_task(bool receive_testcase_files) {
+    receive_task_details(data_socket, taskData);
+    if (receive_testcase_files) {
+        for (auto task : taskData) {
+            for (auto subtask : task.subtask) {
+                for (auto testcase : subtask.testcase) {
+                    receive_file(data_socket);
+                    receive_file(data_socket);
+                    cout<<"Received testcase "<<testcase.input_path<<" and "<<testcase.expected_output_path<<" from distributor"<<endl;
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -164,11 +156,9 @@ void Worker::processTasksLoop() {
 
         cout<<"[Worker] Task "<<taskID<<" subtask "<<subtaskID<<" has "<<taskData[taskID].subtask[subtaskID].testcase.size()<<" testcases"<<endl;
 
-        for (int i=0; i<(int)taskData[taskID].subtask[subtaskID].testcase.size(); ++i) {
+        for (int i=r; i<(int)taskData[taskID].subtask[subtaskID].testcase.size(); i+=mod) {
             cout<<"[Worker] Processing testcase "<<i<<" for task "<<taskID<<" subtask "<<subtaskID<<endl;
             
-            if (i%mod!=r) continue;
-
             if (early_termination) {
                 result.is_accepted=false;
                 break;

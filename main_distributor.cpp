@@ -18,6 +18,7 @@ int main() {
     vector<MachineAddress> machine_addresses = {
         {htonl(INADDR_LOOPBACK), 9999},
         {htonl(INADDR_LOOPBACK), 8888},
+        {htonl(INADDR_LOOPBACK), 7777},
     };
 
     int output_fd = open("output.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -27,13 +28,12 @@ int main() {
     }
 
     Distributor distributor(output_fd, machine_addresses);
-    // distributor.send_testcase("test1.json");
-    distributor.init_task("test1.json");
+    distributor.init_task_auto_detect("testcase_config2.json", {"testcase"}, false);
     distributor.start();
 
-    distributor.add_submission(SubmissionInfo{1, 1, 0, "../temp"});
+    //distributor.add_submission(SubmissionInfo{11, 105, 0, "sol/bruteforce"});
+    distributor.add_submission(SubmissionInfo{11, 207, 0, "sol/sol"});
 
-    sleep(5);
     distributor.shutdown();
 
 }

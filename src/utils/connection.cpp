@@ -11,14 +11,12 @@ using namespace std;
 // ============================================================================
 
 void sendTaskMessage(const TaskMessage& task_message, const vector<char>& executable_data, int socket) {
-    // Send all fields using send_int
     send_int(socket, task_message.task_id);
     send_int(socket, task_message.subtask_id);
     send_int(socket, task_message.mod);
     send_int(socket, task_message.r);
     send_int(socket, task_message.executable_size);
     
-    // Send executable binary data
     if (!executable_data.empty()) {
         send_all(socket, executable_data.data(), executable_data.size());
     }
@@ -29,21 +27,19 @@ pair<TaskMessage, vector<char>> receiveTaskMessage(int socket) {
     vector<char> executable_data;
     
     try {
-        // Receive all fields using recv_int
         msg.task_id = recv_int(socket);
         msg.subtask_id = recv_int(socket);
         msg.mod = recv_int(socket);
         msg.r = recv_int(socket);
         msg.executable_size = recv_int(socket);
         
-        // Receive executable binary data
         if (msg.executable_size > 0) {
             executable_data.resize(msg.executable_size);
             recv_all(socket, executable_data.data(), msg.executable_size);
         }
     } catch (const runtime_error& e) {
         cerr << "[receiveTaskMessage] Error: " << e.what() << endl;
-        msg.task_id = -1; // Indicate error
+        msg.task_id = -1;
         executable_data.clear();
     }
     
@@ -57,7 +53,6 @@ pair<TaskMessage, vector<char>> receiveTaskMessage(int socket) {
 void sendResult(const Result& result, int socket) {
     cout << "[sendResult] Sending result: task_id=" << result.task_id << " subtask_id=" << result.subtask_id << " num_outputs=" << result.test_output.size() << endl;
     
-    // Send header fields
     send_int(socket, result.task_id);
     send_int(socket, result.subtask_id);
     send_int(socket, result.maximum_time);
@@ -86,7 +81,6 @@ Result receiveResult(int socket) {
     Result result;
     
     try {
-        // Receive header fields
         result.task_id = recv_int(socket);
         result.subtask_id = recv_int(socket);
         result.maximum_time = recv_int(socket);
@@ -152,8 +146,7 @@ void send_file(int socket, const string& input_path, const string& output_path) 
     // Send file data
     send_binary(socket, file_data);
     
-    cerr << "[send_file] Sent " << file_size << " bytes from " 
-         << input_path << " -> " << output_path << endl;
+    cerr << "[send_file] Sent " << file_size << " bytes from " << input_path << " -> " << output_path << endl;
 }
 
 void receive_file(int socket) {
@@ -191,10 +184,88 @@ void receive_file(int socket) {
         output_file.write(file_data.data(), file_data.size());
         output_file.close();
         
-        cerr << "[receive_file] Received " << file_data.size() << " bytes -> " 
-             << output_path << endl;
+        cerr << "[receive_file] Received " << file_data.size() << " bytes -> " << output_path << endl;
              
     } catch (const runtime_error& e) {
         cerr << "[receive_file] Error: " << e.what() << endl;
+    }
+}
+
+// ============================================================================
+// Task Details Protocol
+// ============================================================================
+
+void send_task_details(int socket, vector<Task>& taskData) {
+    send_int(socket, taskData.size());
+    
+    for (const auto& task : taskData) {
+        send_int(socket, task.task_id);
+        send_int(socket, task.memory_limit);
+        send_int(socket, task.time_limit);
+        send_int(socket, task.subtask.size());
+        
+        for (const auto& subtask : task.subtask) {
+            send_int(socket, subtask.task_id);
+            send_int(socket, subtask.subtask_id);
+            send_int(socket, subtask.mod);
+            
+            send_int(socket, subtask.dependencies.size());
+            for (int dep : subtask.dependencies) {
+                send_int(socket, dep);
+            }
+            
+            send_int(socket, subtask.testcase.size());
+            for (const auto& tc : subtask.testcase) {
+                send_string(socket, tc.input_path);
+                send_string(socket, tc.expected_output_path);
+            }
+        }
+    }
+    
+    cout << "[send_task_details] Successfully sent " << taskData.size() << " tasks" << endl;
+}
+
+void receive_task_details(int socket, vector<Task>& taskData) {
+    try {
+        int task_count = recv_int(socket);
+        taskData.resize(task_count);
+        
+        for (int t = 0; t < task_count; t++) {
+            Task& task = taskData[t];
+            
+            task.task_id = recv_int(socket);
+            task.memory_limit = recv_int(socket);
+            task.time_limit = recv_int(socket);
+            
+            int subtask_count = recv_int(socket);
+            task.subtask.resize(subtask_count);
+            
+            for (int s = 0; s < subtask_count; s++) {
+                Subtask& subtask = task.subtask[s];
+                
+                subtask.task_id = recv_int(socket);
+                subtask.subtask_id = recv_int(socket);
+                subtask.mod = recv_int(socket);
+                
+                int dep_count = recv_int(socket);
+                subtask.dependencies.resize(dep_count);
+                for (int d = 0; d < dep_count; d++) {
+                    subtask.dependencies[d] = recv_int(socket);
+                }
+                
+                int tc_count = recv_int(socket);
+                subtask.testcase.resize(tc_count);
+                for (int tc = 0; tc < tc_count; tc++) {
+                    subtask.testcase[tc].input_path = recv_string(socket);
+                    subtask.testcase[tc].expected_output_path = recv_string(socket);
+                }
+            }
+        }
+        
+        cout << "[receive_task_details] Successfully received " << task_count << " tasks" << endl;
+        
+    } catch (const runtime_error& e) {
+        cerr << "[receive_task_details] Error: " << e.what() << endl;
+        throw;
     }
 }

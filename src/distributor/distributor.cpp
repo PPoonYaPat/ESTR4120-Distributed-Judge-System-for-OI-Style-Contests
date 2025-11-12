@@ -16,6 +16,7 @@ Distributor::Distributor(int output_FD, vector<MachineAddress> machine_addresses
     output_fd = output_FD;
     cnt_worker = (int)machine_addresses.size();
     this->machine_addresses = machine_addresses;
+    worker_status.resize(cnt_worker, make_pair(-1, -1));
 
     for (auto machine_address : machine_addresses) {
 
@@ -40,34 +41,39 @@ Distributor::Distributor(int output_FD, vector<MachineAddress> machine_addresses
 }
 
 // ============================================================================
-// Send testcase to workers
+// Initialize task
 // ============================================================================
 
-void Distributor::send_testcase(string file_config_path) {
-    init_task(file_config_path);
+void Distributor::init_task(string testcase_config_path, bool send_testcase_files) {
+    this->testcase_config_path = testcase_config_path;
+    read_json(testcase_config_path, taskData);    
+    init_dependencies(taskData, tasks_dependency_counts, tasks_dependency_edges);
+    send_testcases(send_testcase_files);
+}
 
+void Distributor::init_task_auto_detect(string testcase_config_path, vector<string> testcase_dirs, bool send_testcase_files) {
+    this->testcase_config_path = testcase_config_path;
+    read_json_auto_detect(testcase_config_path, testcase_dirs, taskData);
+    init_dependencies(taskData, tasks_dependency_counts, tasks_dependency_edges);
+    send_testcases(send_testcase_files);
+}
+
+void Distributor::send_testcases(bool send_testcase_files) {
     for (int i=0; i<cnt_worker; ++i) {
-        send_file(worker_data_sockets[i], file_config_path, "testcase_config.json");
-        for (auto task : taskData) {
-            for (auto subtask : task.subtask) {
-                for (auto testcase : subtask.testcase) {
-                    send_file(worker_data_sockets[i], testcase.input_path, testcase.input_path);
-                    send_file(worker_data_sockets[i], testcase.expected_output_path, testcase.expected_output_path);
-                    cout<<"Sent testcase "<<testcase.input_path<<" and "<<testcase.expected_output_path<<" to worker "
-                    <<ip_to_string(machine_addresses[i].address)<<":"<<machine_addresses[i].listening_port<<"\n";
+        send_task_details(worker_data_sockets[i], taskData);
+        if (send_testcase_files) {
+            for (auto task : taskData) {
+                for (auto subtask : task.subtask) {
+                    for (auto testcase : subtask.testcase) {
+                        send_file(worker_data_sockets[i], testcase.input_path, testcase.input_path);
+                        send_file(worker_data_sockets[i], testcase.expected_output_path, testcase.expected_output_path);
+                        cout<<"Sent testcase "<<testcase.input_path<<" and "<<testcase.expected_output_path<<" to worker "
+                        <<ip_to_string(machine_addresses[i].address)<<":"<<machine_addresses[i].listening_port<<"\n";
+                    }
                 }
             }
         }
     }
-}
-
-// ============================================================================
-// Initialize task
-// ============================================================================
-
-void Distributor::init_task(string testcase_config_path) {
-    read_json(testcase_config_path, taskData);    
-    init_dependencies(taskData, tasks_dependency_counts, tasks_dependency_edges);
 }
 
 // ============================================================================
@@ -76,7 +82,7 @@ void Distributor::init_task(string testcase_config_path) {
 
 void Distributor::start() {
     for (int i=0; i<(int)worker_data_sockets.size(); ++i) {
-        worker_threads.push_back(thread(&Distributor::worker_communication_loop, this, worker_data_sockets[i], worker_control_sockets[i]));
+        worker_threads.push_back(thread(&Distributor::worker_communication_loop, this, worker_data_sockets[i], worker_control_sockets[i], i));
     }
 }
 
@@ -92,11 +98,40 @@ void Distributor::wait_for_completion() {
     }
 }
 
+void Distributor::wait_until_all_done() {
+    while (true) {
+        bool all_done = false;
+        
+        {
+            lock_guard<mutex> queue_lock(submission_queue_mutex);
+            lock_guard<mutex> status_lock(worker_status_mutex);
+            
+            if (task_queue.empty()) {
+                all_done = true;
+                for (const auto& status : worker_status) {
+                    if (status.first != -1) {
+                        all_done = false;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (all_done) {
+            cout << "[Distributor] All tasks completed!" << endl;
+            return;
+        }
+        
+        this_thread::sleep_for(chrono::milliseconds(100));
+    }
+}
+
 // ============================================================================
 // Shutdown distributor
 // ============================================================================
 
 void Distributor::shutdown() {
+    wait_until_all_done();
     should_stop = true;
     task_available_cv.notify_all();
     wait_for_completion();
@@ -128,10 +163,10 @@ void Distributor::add_submission(const SubmissionInfo& submission_info) {
                         submission_info.submission_id,
                         TaskDetail{ task_id, i, mod, j, submission_info.executable_path }
                     });
+                    task_available_cv.notify_one();
                 }
             }
             cout<<"[Distributor] Added submission "<<submission_info.submission_id<<" to task "<<task_id<<" subtask "<<i<<endl;
-            task_available_cv.notify_one();
         }
     }
 }
@@ -140,7 +175,7 @@ void Distributor::add_submission(const SubmissionInfo& submission_info) {
 // Worker communication loop
 // ============================================================================
 
-void Distributor::worker_communication_loop(int worker_data_socket, int worker_control_socket) {
+void Distributor::worker_communication_loop(int worker_data_socket, int worker_control_socket, int worker_index) {
     assert(worker_data_socket >= 0 && worker_control_socket >= 0);
 
     while (!should_stop) {
@@ -166,6 +201,11 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
 
         if (!has_task) {
             continue;
+        }
+
+        {
+            lock_guard<mutex> lock(worker_status_mutex);
+            worker_status[worker_index] = make_pair(task.submission_id, task.task_detail.subtask_id);
         }
 
         cout << "[Distributor] Data socket:" << worker_data_socket << " Processing submission " << task.submission_id 
@@ -218,6 +258,11 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
             }
         }
 
+        {
+            lock_guard<mutex> lock(worker_status_mutex);
+            worker_status[worker_index] = make_pair(-1, -1);
+        }
+
         if (result.is_accepted) {
             
             for (auto s : tasks_dependency_edges[task.task_detail.task_id][task.task_detail.subtask_id]) {
@@ -241,21 +286,46 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
                                 TaskDetail{
                                     task.task_detail.task_id,
                                     s,
-                                    task.task_detail.mod,
+                                    mod,
                                     j,
                                     task.task_detail.executable_path
                                 }
                             });
+                            task_available_cv.notify_one();
                         }
                     }
                     cout<<"[Distributor] All dependencies of submission "<<task.submission_id<<" for task "<<task.task_detail.task_id<<" subtask "<<s<<" are satisfied"<<endl;
                     cout<<"[Distributor] Added submission "<<task.submission_id<<" to task "<<task.task_detail.task_id<<" subtask "<<s<<endl;
-                    task_available_cv.notify_one();
                 }
             }
 
         } else {
             // Do early termination
+
+            // remove the same submission_id and subtask_id from the task_queue
+            {
+                lock_guard<mutex> lock(submission_queue_mutex);
+                queue<SubgroupTask> filtered_queue;
+                while (!task_queue.empty()) {
+                    SubgroupTask current = move(task_queue.front());
+                    task_queue.pop();
+                    if (!(current.submission_id == task.submission_id && current.task_detail.subtask_id == task.task_detail.subtask_id)) {
+                        filtered_queue.push(move(current));
+                    }
+                }
+                task_queue = move(filtered_queue);
+            }
+
+            // remove the same submission_id and subtask_id from the worker and change worker_status
+            {
+                lock_guard<mutex> lock(worker_status_mutex);
+                for (int i=0; i<cnt_worker; ++i) {
+                    if (worker_status[i].first == task.submission_id && worker_status[i].second == task.task_detail.subtask_id) {
+                        worker_status[i] = make_pair(-1, -1);
+                        send_int(worker_control_sockets[i], 0);
+                    }
+                }
+            }
         }
     }
 }

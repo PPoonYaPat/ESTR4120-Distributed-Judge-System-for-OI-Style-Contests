@@ -20,13 +20,28 @@ struct Testcase {
 */
 
 bool outputs_match(const string& user_output, const string& expected_output) {
-    auto trim = [](string s) {
-        while (!s.empty() && isspace(s.back())) s.pop_back();
-        while (!s.empty() && isspace(s.front())) s.erase(0, 1);
-        return s;
+    auto normalize = [](string s) {
+        stringstream ss(s);
+        string line;
+        vector<string> lines;
+        
+        while (getline(ss, line)) {
+            while (!line.empty() && (isspace(line.back()) || line.back()=='\r')) line.pop_back();
+            lines.push_back(line);
+        }
+        
+        while (!lines.empty() && lines.back().empty()) lines.pop_back();
+        
+        string result;
+        for (int i=0; i<(int)lines.size(); ++i) {
+            result+=lines[i];
+            if (i < (int)lines.size() - 1) result+='\n';
+        }
+        
+        return result;
     };
-    
-    return trim(user_output) == trim(expected_output);
+
+    return normalize(user_output) == normalize(expected_output);
 }
 
 bool read_file(const string& filepath, string& content) {
@@ -45,11 +60,22 @@ string check_process_verdict(int status, const struct rusage& usage, int time_li
     time_usage = (usage.ru_utime.tv_sec * 1000) + (usage.ru_utime.tv_usec / 1000);
     memory_usage = usage.ru_maxrss / 1024;
     
+    // Check limits first (most reliable way to detect MLE/TLE)
+    if (memory_usage > memory_limit) return "MLE";
+    if (time_usage > time_limit) return "TLE";
+    
     // Check signals
     if (WIFSIGNALED(status)) {
         int sig = WTERMSIG(status);
         if (sig == SIGXCPU) return "TLE";
-        if (sig == SIGKILL || sig == SIGSEGV || sig == SIGABRT) return "MLE";
+        if (sig == SIGABRT) return "RE";  // Assertion failure or abort()
+        // SIGSEGV or SIGKILL could be from memory issues or other runtime errors
+        // Since we already checked memory_usage above, if we get here and memory is OK, it's RE
+        if (sig == SIGSEGV || sig == SIGKILL) {
+            // If memory usage exceeded limit, it's MLE (though we should have caught this above)
+            // Otherwise, it's a runtime error (segmentation fault or killed)
+            return "RE";
+        }
         return "RE";
     }
     
@@ -57,10 +83,6 @@ string check_process_verdict(int status, const struct rusage& usage, int time_li
     if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
         return "RE";
     }
-    
-    // Check limits
-    if (time_usage > time_limit) return "TLE";
-    if (memory_usage > memory_limit) return "MLE";
     
     return "OK";  // No errors
 }
