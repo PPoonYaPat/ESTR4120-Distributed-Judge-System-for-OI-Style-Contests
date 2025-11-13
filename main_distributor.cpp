@@ -21,7 +21,7 @@ int main() {
         {htonl(INADDR_LOOPBACK), 7777},
     };
 
-    int output_fd = open("output.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    int output_fd = open("log.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666);
     if (output_fd == -1) {
         cerr << "Error: Failed to open output file" << endl;
         exit(1);

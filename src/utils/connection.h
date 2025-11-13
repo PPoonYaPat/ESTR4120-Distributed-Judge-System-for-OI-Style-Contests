@@ -15,12 +15,12 @@ using namespace std;
 // task_message: The task message with executable_size field set
 // executable_data: The binary executable file data
 // socket: The socket to send to
-void sendTaskMessage(const TaskMessage& task_message, const vector<char>& executable_data, int socket);
+void sendTaskMessage(const TaskMessage& task_message, string executable_path, int socket);
 
 // Receive TaskMessage with executable file from distributor
 // socket: The socket to receive from
 // Returns: pair containing (TaskMessage, executable_data)
-pair<TaskMessage, vector<char>> receiveTaskMessage(int socket);
+pair<TaskMessage, vector<char>> receiveTaskMessage(int socket, vector<int>& cache_submission_ids);
 
 // ============================================================================
 // Result Protocol

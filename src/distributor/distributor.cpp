@@ -214,28 +214,16 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
 
         string executable_path = task.task_detail.executable_path;
 
-        vector<char> executable_data;
-        ifstream exe_file(executable_path, ios::binary | ios::ate);
-        if (exe_file) {
-            size_t executable_size = exe_file.tellg();
-            exe_file.seekg(0, ios::beg);
-            executable_data.resize(executable_size);
-            exe_file.read(executable_data.data(), executable_size);
-            exe_file.close();
-        } else {
-            cerr << "Error: Cannot open executable file: " << executable_path << endl;
-            continue;
-        }
-
         TaskMessage task_message = {
+            task.submission_id,
             task.task_detail.task_id,
             task.task_detail.subtask_id,
             task.task_detail.mod,
             task.task_detail.r,
-            (int)executable_data.size()
+            0 // executable_size is not used in this version
         };
         
-        sendTaskMessage(task_message, executable_data, worker_data_socket);
+        sendTaskMessage(task_message, executable_path, worker_data_socket);
 
         Result result = receiveResult(worker_data_socket);
         cout << "[Distributor] Data socket:" << worker_data_socket << " Received result for submission " << task.submission_id 
@@ -248,10 +236,13 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
                 dprintf(output_fd, "submission_id: %d, task_id: %d, subtask_id: %d, is_accepted: %d\n", 
                         task.submission_id, result.task_id, result.subtask_id, result.is_accepted ? 1 : 0);
 
+                int r=task.task_detail.r, mod=task.task_detail.mod;
+                if (r==0) r=mod;
+
                 for (size_t i = 0; i < result.test_output.size(); ++i) {
                     const auto& out = result.test_output[i];
                     dprintf(output_fd, "  Test #%zu: verdict=%s, time=%ld ms, memory=%ld MB\n",
-                            i+1, out.verdict.c_str(), out.time_usage, out.memory_usage);
+                            i*mod+r, out.verdict.c_str(), out.time_usage, out.memory_usage);
                 }
 
                 fsync(output_fd);
@@ -301,6 +292,30 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
 
         } else {
             // Do early termination
+            for (auto s : tasks_dependency_edges[task.task_detail.task_id][task.task_detail.subtask_id]) {
+                bool output_to_console_yet=true;
+                {
+                    lock_guard<mutex> lock(dependencies_mutex);
+                    if (submission_dependencies[task.submission_id][s] != -1) {
+                        submission_dependencies[task.submission_id][s] = -1;
+                        output_to_console_yet = false;
+                    }
+                }
+
+                if (!output_to_console_yet) {
+                    {
+                        lock_guard<mutex> lock(output_fd_mutex);
+                        if (output_fd >= 0) {
+                            dprintf(output_fd, "submission_id: %d, task_id: %d, subtask_id: %d, is_accepted: %d\n", 
+                                    task.submission_id, task.task_detail.task_id, task.task_detail.subtask_id, 0);
+
+                            dprintf(output_fd, "  Test #1: verdict=skipped\n");
+            
+                            fsync(output_fd);
+                        }
+                    }
+                }
+            }
 
             // remove the same submission_id and subtask_id from the task_queue
             {

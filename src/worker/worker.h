@@ -9,8 +9,10 @@ class Worker {
 private:
     int data_socket;
     int control_socket;
+    int max_cache_cnt;
     atomic<bool> early_termination, should_stop;
     vector<Task> taskData;
+    vector<int> cache_submission_ids;
 
     // Private methods
     void controlMessageListener();

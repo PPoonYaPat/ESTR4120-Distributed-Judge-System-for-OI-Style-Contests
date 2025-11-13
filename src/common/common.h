@@ -22,6 +22,7 @@ struct Result {
 };
 
 struct TaskMessage {
+    int submission_id;
     int task_id;
     int subtask_id;
     int mod, r;

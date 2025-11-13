@@ -26,6 +26,7 @@ using namespace std;
 
 Worker::Worker(int listening_port) : early_termination(false), should_stop(false) {
 
+    max_cache_cnt = 5;
     int listening_socket = listen_on_port(listening_port);
     if (listening_socket == -1) {
         cerr << "Error: Failed to listen on port " << listening_port << endl;
@@ -106,23 +107,15 @@ void Worker::controlMessageListener() {
 
 void Worker::processTasksLoop() {
     while (!should_stop) {
-        auto [task_message, executable_data] = receiveTaskMessage(data_socket);
+        auto [task_message, executable_data] = receiveTaskMessage(data_socket, cache_submission_ids);
         cout<<"[Worker] Received task message from distributor"<<endl;
-        
-        if (task_message.task_id < 0 || executable_data.empty()) {
-            break;
-        }
 
+        int submission_id = task_message.submission_id;
         int taskID = task_message.task_id;
         int subtaskID = task_message.subtask_id;
         int mod = task_message.mod;
         int r = task_message.r;
         int executable_size = task_message.executable_size;
-
-        if (executable_size <= 0) {
-            cout << "[Worker] Error: Invalid executable size" << endl;
-            continue;
-        }
 
         // Create executables directory if it doesn't exist
         struct stat info;
@@ -130,20 +123,22 @@ void Worker::processTasksLoop() {
             mkdir("executables", 0755);
         }
 
-        // Generate unique executable filename
-        string executable_path = "executables/exec_" + to_string(taskID) + "_" + to_string(subtaskID) + "_" + to_string(time(nullptr));
+        string executable_path = "executables/" + to_string(submission_id);
 
-        // Save executable to file
-        ofstream exec_file(executable_path, ios::binary);
-        if (!exec_file) {
-            cout << "[Worker] Error: Cannot create executable file" << endl;
-            continue;
+        if (executable_size > 0) {
+            // Save executable to file
+            ofstream exec_file(executable_path, ios::binary);
+            if (!exec_file) {
+                cout << "[Worker] Error: Cannot create executable file" << endl;
+                continue;
+            }
+            exec_file.write(executable_data.data(), executable_size);
+            exec_file.close();
+
+            // Make executable
+            chmod(executable_path.c_str(), 0755);
+            cache_submission_ids.push_back(submission_id);
         }
-        exec_file.write(executable_data.data(), executable_size);
-        exec_file.close();
-
-        // Make executable
-        chmod(executable_path.c_str(), 0755);
 
         Result result;
         result.task_id = taskID;
@@ -176,9 +171,16 @@ void Worker::processTasksLoop() {
                 break;
             }
         }
-
-        // Clean up executable file
-        unlink(executable_path.c_str());
+        
+        if ((int)cache_submission_ids.size() == max_cache_cnt + 1) {
+            int oldest_submission_id = cache_submission_ids[0];
+            cache_submission_ids.erase(cache_submission_ids.begin());
+            
+            string oldest_path = "executables/" + to_string(oldest_submission_id);
+            unlink(oldest_path.c_str());
+            
+            cout << "[Worker] Evicted cached executable: " << oldest_submission_id << endl;
+        }
 
         sendResult(result, data_socket);
         cout<<"[Worker] Sent result to distributor"<<endl;

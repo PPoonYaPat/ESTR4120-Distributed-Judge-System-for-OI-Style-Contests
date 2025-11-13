@@ -10,27 +10,54 @@ using namespace std;
 // Task Message Protocol
 // ============================================================================
 
-void sendTaskMessage(const TaskMessage& task_message, const vector<char>& executable_data, int socket) {
+void sendTaskMessage(const TaskMessage& task_message, string executable_path, int socket) {
+    send_int(socket, task_message.submission_id);
     send_int(socket, task_message.task_id);
     send_int(socket, task_message.subtask_id);
     send_int(socket, task_message.mod);
     send_int(socket, task_message.r);
-    send_int(socket, task_message.executable_size);
-    
+
+    if (recv_int(socket) == 0) return;
+
+    vector<char> executable_data;
+    ifstream exe_file(executable_path, ios::binary | ios::ate);
+    if (exe_file) {
+        size_t executable_size = exe_file.tellg();
+        exe_file.seekg(0, ios::beg);
+        executable_data.resize(executable_size);
+        exe_file.read(executable_data.data(), executable_size);
+        exe_file.close();
+    } else {
+        cerr << "Error: Cannot open executable file: " << executable_path << endl;
+    }
+
+    send_int(socket, executable_data.size());
     if (!executable_data.empty()) {
         send_all(socket, executable_data.data(), executable_data.size());
     }
 }
 
-pair<TaskMessage, vector<char>> receiveTaskMessage(int socket) {
+pair<TaskMessage, vector<char>> receiveTaskMessage(int socket, vector<int>& cache_submission_ids) {
     TaskMessage msg;
     vector<char> executable_data;
     
     try {
+        msg.submission_id = recv_int(socket);
         msg.task_id = recv_int(socket);
         msg.subtask_id = recv_int(socket);
         msg.mod = recv_int(socket);
         msg.r = recv_int(socket);
+
+        auto it = find(cache_submission_ids.begin(), cache_submission_ids.end(), msg.submission_id);
+        if (it != cache_submission_ids.end()) { // LRU: mark as most recently used
+            cache_submission_ids.erase(it);
+            cache_submission_ids.push_back(msg.submission_id);
+            msg.executable_size = -1;
+            send_int(socket, 0);
+            return make_pair(msg, executable_data);
+        }
+
+        send_int(socket, 1);
         msg.executable_size = recv_int(socket);
         
         if (msg.executable_size > 0) {
