@@ -237,12 +237,10 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
                         task.submission_id, result.task_id, result.subtask_id, result.is_accepted ? 1 : 0);
 
                 int r=task.task_detail.r, mod=task.task_detail.mod;
-                if (r==0) r=mod;
-
                 for (size_t i = 0; i < result.test_output.size(); ++i) {
                     const auto& out = result.test_output[i];
                     dprintf(output_fd, "  Test #%zu: verdict=%s, time=%ld ms, memory=%ld MB\n",
-                            i*mod+r, out.verdict.c_str(), out.time_usage, out.memory_usage);
+                            i*mod+r+1, out.verdict.c_str(), out.time_usage, out.memory_usage);
                 }
 
                 fsync(output_fd);
@@ -307,7 +305,7 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
                         lock_guard<mutex> lock(output_fd_mutex);
                         if (output_fd >= 0) {
                             dprintf(output_fd, "submission_id: %d, task_id: %d, subtask_id: %d, is_accepted: %d\n", 
-                                    task.submission_id, task.task_detail.task_id, task.task_detail.subtask_id, 0);
+                                    task.submission_id, task.task_detail.task_id, s, 0);
 
                             dprintf(output_fd, "  Test #1: verdict=skipped\n");
             
