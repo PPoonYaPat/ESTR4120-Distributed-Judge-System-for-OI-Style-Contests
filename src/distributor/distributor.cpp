@@ -1,4 +1,4 @@
-#include "Distributor.h"
+#include "distributor.h"
 #include "../common/common.h"
 #include "../utils/connection.h"
 #include "../utils/base_connection.h"
