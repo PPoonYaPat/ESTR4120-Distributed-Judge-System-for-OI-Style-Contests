@@ -1,5 +1,6 @@
 # Distributed Judge System for OI-Style Contests
-(in progress)
+
+[➡️ **How to Use This Project**](#how-to-use-this-project)
 
 ## Introduction
 OI-style contests are a type of competitive programming competition, such as IOI and APIO.
@@ -74,6 +75,10 @@ Our distributor employs **two-level parallelism** to maximize concurrency:
 
 We don't apply internal parallelism to small subtasks because the **communication overhead outweighs the benefits**. Splitting small tasks requires multiple send/receive operations that can exceed the actual evaluation time. Additionally, broadcasting early termination signals to multiple workers adds unnecessary latency and complexity. In contrast, large subtasks justify the parallelization investment since: (1) they're only reached after basic correctness is validated, indicating higher success probability, and (2) their long execution time makes communication overhead negligible by comparison.
 
+### Executable File LRU Cache
+
+**Strategy**: When workers process multiple test cases from the same submission, repeatedly transferring identical executables wastes bandwidth and time. To address this, each worker maintains an LRU cache indexed by submission ID. On first contact with a submission, the executable is cached locally. Subsequent test cases retrieve the cached file instantly, eliminating redundant transfers. The LRU eviction policy automatically manages memory by removing least-recently-used entries when capacity is reached.
+
 
 ## Dependency-Aware Execution: Smart Concurrency Control
 
@@ -109,3 +114,146 @@ If Subtask 3 fails:
   ✓ Continue: Subtask 5, 7.1, 7.2 (independent path through Subtask 2)
 ```
 
+# How to Use This Project
+
+## Prerequisites
+
+1. **C++ Compiler**: G++ compiler with C++17 support or higher
+2. **Build System**: GNU Make
+3. **Dependencies**: 
+   - [nlohmann/json](https://github.com/nlohmann/json) library for JSON parsing.
+
+## Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone 
+   cd distributed-judge-system
+   ```
+
+2. **Install dependencies**:
+   - Download and include `nlohmann/json` header in your include path
+   - Or install via package manager (e.g., `apt install nlohmann-json3-dev`) (recommended)
+
+3. **Build the project**:
+   ```bash
+   make
+   ```
+
+## Configuration
+
+### Testcase Setup
+
+Before running the system, prepare your testcase files:
+
+1. **Directory Structure**: Create testcase folders for each problem
+   ```
+   testcase_problem1/
+   ├── 00_01.in
+   ├── 00_01.out
+   ├── 01_01.in
+   ├── 01_01.out
+   ├── 01_02.in
+   ├── 01_02.out
+   ...
+   ```
+
+2. **Naming Convention**: Files must follow the pattern `{subtask_id}_{testcase_id}.{in|out}`
+   - **Important**: Indexing starts from 0
+   - Example: `00_01.in` = Subtask 0, Test case 1
+   - Example: `02_03.out` = Subtask 2, Test case 3, expected output
+
+3. **Configuration File** (`testcase_config.json`):
+  The configuration file should be in this following format:
+   ```json
+   {
+     "tasks": [
+       {
+         "task_id": 0,
+         "memory_limit": 1024000,
+         "time_limit": 2000,
+         "subtasks": [
+           {
+             "subtask_id": 0,
+             "mod": 1,
+             "dependencies": []
+           },
+           {
+             "subtask_id": 1,
+             "mod": 1,
+             "dependencies": [0]
+           },
+           {
+             "subtask_id": 2,
+             "mod": 1,
+             "dependencies": [0, 1]
+           },
+           {
+             "subtask_id": 3,
+             "mod": 1,
+             "dependencies": [0, 1]
+           },
+           {
+             "subtask_id": 4,
+             "mod": 2,
+             "dependencies": [0, 1 ,3]
+           },
+           {
+             "subtask_id": 5,
+             "mod": 4,
+             "dependencies": [0, 1, 2, 3, 4]
+           }
+         ]
+       },
+       {
+        more tasks...
+       },
+       more tasks...
+     ]
+   }
+   ```
+   
+   **Configuration Fields in `testcase_config.json`:**
+   - `task_id`: Problem identifier
+   - `memory_limit`: Memory limit in KB
+   - `time_limit`: Time limit in milliseconds
+   - `subtask_id`: Subtask identifier (must match testcase file prefix)
+   - `mod`: Number of workers to parallelize this subtask across (internal parallelism)
+   - `dependencies`: Array of subtask IDs that must pass before this subtask runs
+
+### Worker and Distributor Setup
+
+You can customize the worker and distributor configuration by editing [`main_worker.cpp`](main_worker.cpp) and [`main_distributor.cpp`](main_distributor.cpp) respectively.
+
+## Running the System
+
+**Important**: Always start workers before starting the distributor.
+
+### 1. Start Workers (on each worker machine)
+
+```bash
+# First run - download testcases
+./worker <port> -tc
+
+# Subsequent runs - use stored testcases
+./worker <port>
+
+# Example:
+./worker 8500 -tc
+```
+
+### 2. Start Distributor (on coordinator machine)
+
+```bash
+./distributor
+```
+
+The distributor will:
+- Connect to all configured workers
+- Load task configurations and testcase metadata
+- Process submissions according to the distribution strategy
+- Output results to the specified log file
+
+## Integration with Existing Grader Systems
+
+This system can be integrated into web-based grading platforms by modifying `add_submission()` to accept frontend requests, routing evaluation logs to a database instead of files, and processing worker results for user-facing display.

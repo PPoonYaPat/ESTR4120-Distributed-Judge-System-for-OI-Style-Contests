@@ -145,6 +145,11 @@ void Distributor::add_submission(const SubmissionInfo& submission_info) {
     int task_id = submission_info.task_id;
     cout<<"[Distributor] Adding submission "<<submission_info.submission_id<<" for task "<<task_id<<endl;
 
+    {
+        lock_guard<mutex> lock(time_mutex);
+        submissions_start_time[submission_info.submission_id] = chrono::steady_clock::now();
+    }
+
     for (int i = 0; i < (int)taskData[task_id].subtask.size(); ++i) {
         int deg_count = tasks_dependency_counts[task_id][i];
         int mod = taskData[task_id].subtask[i].mod;
@@ -230,11 +235,17 @@ void Distributor::worker_communication_loop(int worker_data_socket, int worker_c
             << " for task " << task.task_detail.task_id 
             << " subtask " << task.task_detail.subtask_id << "\n";
 
+        chrono::steady_clock::duration elapsed_time;
+        {
+            lock_guard<mutex> lock(time_mutex);
+            elapsed_time = chrono::steady_clock::now() - submissions_start_time[task.submission_id];
+        }
+
         {
             lock_guard<mutex> lock(output_fd_mutex);
             if (output_fd >= 0) {
-                dprintf(output_fd, "submission_id: %d, task_id: %d, subtask_id: %d, is_accepted: %d\n", 
-                        task.submission_id, result.task_id, result.subtask_id, result.is_accepted ? 1 : 0);
+                dprintf(output_fd, "submission_id: %d, task_id: %d, subtask_id: %d, is_accepted: %d, time=%ld ms\n", 
+                        task.submission_id, result.task_id, result.subtask_id, result.is_accepted ? 1 : 0, chrono::duration_cast<chrono::milliseconds>(elapsed_time).count());
 
                 int r=task.task_detail.r, mod=task.task_detail.mod;
                 for (size_t i = 0; i < result.test_output.size(); ++i) {

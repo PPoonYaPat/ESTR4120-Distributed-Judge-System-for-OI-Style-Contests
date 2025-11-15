@@ -3,13 +3,20 @@
 using namespace std;
 
 int main(int argc, char* argv[]) {
-    assert(argc==2 || argc==3);
-    int listening_port=atoi(argv[1]);
-
-    bool download_testcases = false;
-    if (argc==3 && string(argv[2])=="-tc") download_testcases = true;
-
+    // Step 1: Initialize worker with listening port
+    int listening_port = atoi(argv[1]);
+    
+    // Step 2: Set testcase download flag
+    // - Use true on first run to download all testcases to worker
+    // - Use false for subsequent runs if testcases are already cached
+    bool download_testcases = (argc==3 && string(argv[2])=="-tc");
+    
     Worker worker(listening_port);
+    
+    // Step 3: Initialize task configuration
+    // This prepares the worker to receive and execute tasks
     worker.init_task(download_testcases);
+    
+    // Step 4: Start worker (begins listening for tasks)
     worker.start();
 }

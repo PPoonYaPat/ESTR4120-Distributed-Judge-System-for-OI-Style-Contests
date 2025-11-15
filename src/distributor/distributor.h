@@ -53,6 +53,9 @@ private:
     vector<pair<int,int>> worker_status; // (worker_index)->(submission_id, subtask_id)
     mutex worker_status_mutex;
 
+    map<int, chrono::steady_clock::time_point> submissions_start_time;
+    mutex time_mutex;
+
     // Private methods
     void worker_communication_loop(int worker_data_socket, int worker_control_socket, int worker_index);
     void wait_for_completion();
